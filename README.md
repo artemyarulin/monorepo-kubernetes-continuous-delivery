@@ -15,7 +15,7 @@ Once PR is merged - deploy all new apps to production cluster. Google Container 
 
 ### Setup
 
-Starting point is [.circleci/config.yaml](.circleci/config.yaml). It's CircleCI config, but it's used only as an example and you can achieve exactly the same with Travis or self hosted solutions like Jenkins. Properties:
+Starting point is [.circleci/config.yml](.circleci/config.yml). It's CircleCI config, but it's used only as an example and you can achieve exactly the same with Travis or self hosted solutions like Jenkins. Properties:
 
 - `PROJECT` - Google Cloud Platform project to use
 - `PROD_CLUSTER` - Production cluster name
