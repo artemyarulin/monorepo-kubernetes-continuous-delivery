@@ -46,15 +46,15 @@ Install latest Docker for Mac with Kubernetes support then:
 - `ENV=local PROJECT=test ACTION=build FILTER='' bash .circleci/ci.sh` - rebuild all Docker images and redeploy all services and apps into local cluster
 - `ENV=local PROJECT=test ACTION=test FILTER='' bash .circleci/ci.sh` - rebuild all and then run all integrations in local cluster context
 
-If you want to build/test only one app then set filter like `FILTER=front`. Those command are hard to remember, so [Makefile](Makefile) with those aliases is provided. Simply run `make build` or `make test` or use favorite build tool.
+If you want to build/test only one app then set filter like `FILTER=front`. Those command are hard to remember, so [Makefile](Makefile) with those aliases is provided. Simply run `make build` or `make test` or use your favorite other build tool.
 
 You can access pods on your local cluster using [kubectl port-forward](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/)
 
 ### Directory structure
 
-- `apps` - folder for your pods, more info in [apps/README.md](apps/README.md)
-- `jobs` - folder for your jobs, more info in [jobs/README.md](jobs/README.md)
-- `services` - folder for your statefulsets, more info in [services/README.md](services/README.md)
+- `apps` - folder for your pods, more info in [apps/README.md](apps/README.md). Example app [apps/front](apps/front)
+- `jobs` - folder for your jobs, more info in [jobs/README.md](jobs/README.md). Example job [jobs/init-kafka-data](jobs/init-kafka-data)
+- `services` - folder for your statefulsets, more info in [services/README.md](services/README.md). Example service [services/2-kafka](services/2-kafka)
 
 ### Integrations
 
