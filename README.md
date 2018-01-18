@@ -15,7 +15,7 @@ Once PR is merged - deploy all new apps to production cluster. Google Container 
 
 ### Setup
 
-Starting point is [.circleci/config.yaml](). It's CircleCI config, but it's used only as an example and you can achieve exactly the same with Travis or self hosted solutions like Jenkins. Properties:
+Starting point is [.circleci/config.yaml](.circleci/config.yaml). It's CircleCI config, but it's used only as an example and you can achieve exactly the same with Travis or self hosted solutions like Jenkins. Properties:
 
 - `PROJECT` - Google Cloud Platform project to use
 - `PROD_CLUSTER` - Production cluster name
@@ -27,7 +27,7 @@ git commands are needed if you would like to have pushback logic (described latt
 
 ### Google Cloud Platform setup
 
-Service account key with project access has to be presented as base64 string in `GC_SERVICE_KEY` environment variable. You may find how to do it here [https://circleci.com/docs/1.0/google-auth/](). Also service account has to have `Kubernetes Engine Admin` role. You can add it on IAM page - [https://console.cloud.google.com/iam-admin/iam/project](). Find your service account (most probably `[NUMBER]-compute@developer.gserviceaccount.com`) and add `Kubernetes Engine Admin` role there. This role is required for new Kubernetes service account creation which is needed for accessing Kubernetes API from inside the pod
+Service account key with project access has to be presented as base64 string in `GC_SERVICE_KEY` environment variable. You may find how to do it here https://circleci.com/docs/1.0/google-auth/. Also service account has to have `Kubernetes Engine Admin` role. You can add it on IAM page - https://console.cloud.google.com/iam-admin/iam/project. Find your service account (most probably `[NUMBER]-compute@developer.gserviceaccount.com`) and add `Kubernetes Engine Admin` role there. This role is required for new Kubernetes service account creation which is needed for accessing Kubernetes API from inside the pod
 
 ### Production cluster setup
 
@@ -46,15 +46,15 @@ Install latest Docker for Mac with Kubernetes support then:
 - `ENV=local PROJECT=test ACTION=build FILTER='' bash .circleci/ci.sh` - rebuild all Docker images and redeploy all services and apps into local cluster
 - `ENV=local PROJECT=test ACTION=test FILTER='' bash .circleci/ci.sh` - rebuild all and then run all integrations in local cluster context
 
-If you want to build/test only one app then set filter like `FILTER=front`. Those command are hard to remember, so [Makefile]() with those aliases is provided. Simply run `make build` or `make test` or use favorite build tool. 
+If you want to build/test only one app then set filter like `FILTER=front`. Those command are hard to remember, so [Makefile](Makefile) with those aliases is provided. Simply run `make build` or `make test` or use favorite build tool.
 
 You can access pods on your local cluster using [kubectl port-forward](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/)
 
 ### Directory structure
 
-- `apps` - folder for your pods, more info in [apps/README.md]()
-- `jobs` - folder for your jobs, more info in [jobs/README.md]()
-- `services` - folder for your statefulsets, more info in [services/README.md]()
+- `apps` - folder for your pods, more info in [apps/README.md](apps/README.md)
+- `jobs` - folder for your jobs, more info in [jobs/README.md](jobs/README.md)
+- `services` - folder for your statefulsets, more info in [services/README.md](services/README.md)
 
 ### Integrations
 
