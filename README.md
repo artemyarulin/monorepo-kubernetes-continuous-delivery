@@ -7,6 +7,10 @@
 - Integration tests made easy
 - Pushback logic - easy to implement commit bots
 
+## TLDR show me the code
+
+[.circleci/ci.sh](.circleci/ci.sh) has all functions for cluster creation, putting it down, etc.
+
 ### Suggested workflow
 
 Once PR is made CI would create new Kuberentes cluster, deploy all apps, run all integration, optionally push back changes back to the branch, destroy test environment
