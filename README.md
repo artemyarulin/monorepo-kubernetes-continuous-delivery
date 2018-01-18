@@ -52,9 +52,9 @@ You can access pods on your local cluster using [kubectl port-forward](https://k
 
 ### Directory structure
 
-- `apps` - folder for your pods, more info in [apps/README.md](apps/README.md). Example app [apps/front](apps/front)
-- `jobs` - folder for your jobs, more info in [jobs/README.md](jobs/README.md). Example job [jobs/init-kafka-data](jobs/init-kafka-data)
-- `services` - folder for your statefulsets, more info in [services/README.md](services/README.md). Example service [services/2-kafka](services/2-kafka)
+- `apps` - folder for your pods, more info in [apps](apps). Example app [apps/front](apps/front)
+- `jobs` - folder for your jobs, more info in [jobs](jobs). Example job [jobs/init-kafka-data](jobs/init-kafka-data)
+- `services` - folder for your statefulsets, more info in [services](services). Example service [services/2-kafka](services/2-kafka)
 
 ### Integrations
 
