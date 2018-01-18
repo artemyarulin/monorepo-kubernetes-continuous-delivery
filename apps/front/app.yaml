@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: {NAME}
 spec:
-  type: NodePort
+  type: NodePort # NodePort is required if you want to expose this service to public on load balancer
   selector:
     app: {NAME}
   ports:
@@ -26,11 +26,3 @@ spec:
         image: {IMAGE}
         ports:
         - containerPort: {PORT}
-        readinessProbe:
-          httpGet:
-            path: /
-            port: {PORT}
-        livenessProbe:
-          httpGet:
-            path: /
-            port: {PORT}

@@ -4,11 +4,11 @@ Apps are stateles pods which are deployed every CI session
 
 ## App configuration
 
-Each folder is an app where name of the folder will be name of the app. Each app may have following files:
+Each folder is an app where name of the folder will be name of the app. Important files:
 
 - `Dockerfile` - actual image for the app
 - `app.yaml` - app definition. You may use `{NAME}` token to get job name and `{IMAGE}` for docker image location and `{PORT}` if you want to have defaul port used
-- `config.yaml` - job config parameters. You may use `{NAME}` token to get job name
+- `config.yaml` - app config parameters. You may use `{NAME}` token to get job name
 
 ## App integrations
 
