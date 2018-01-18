@@ -1,0 +1,5 @@
+FROM confluentinc/cp-kafka:4.0.0-2
+CMD bash /srv/init-regions.sh && \
+    kafka-console-consumer --topic "regions_0" --bootstrap-server $KAFKA --offset earliest --partition 0 --max-messages 1 && \
+    kafka-console-consumer --topic "regions_1" --bootstrap-server $KAFKA --offset earliest --partition 0 --max-messages 3 && \
+    kafka-console-consumer --topic "regions_2" --bootstrap-server $KAFKA --offset earliest --partition 0 --max-messages 1

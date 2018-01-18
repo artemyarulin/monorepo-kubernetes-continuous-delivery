@@ -1,0 +1,15 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['pull', '{CACHED}']
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+            'build',
+            '--cache-from',
+            '{CACHED}',
+            '--tag',
+            '{NAME}',
+            '--file',
+            '{DOCKERFILE}',
+            '.'
+        ]
+images: ['{NAME}']

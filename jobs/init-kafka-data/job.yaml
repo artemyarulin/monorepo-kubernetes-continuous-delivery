@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {NAME}
+spec:
+  activeDeadlineSeconds: 60
+  template:
+    metadata:
+      name: {NAME}
+    spec:
+      containers:
+      - name: {NAME}
+        image: {IMAGE}
+        envFrom:
+          - configMapRef:
+              name: {NAME}
+      restartPolicy: Never

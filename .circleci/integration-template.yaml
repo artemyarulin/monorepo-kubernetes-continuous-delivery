@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {NAME}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      terminationGracePeriodSeconds: 0
+      {SERVICE_ACC}
+      initContainers:
+        - name: file-getter
+          image: alpine:3.7
+          command:
+            - "sh"
+            - "-c"
+            - >-
+              apk update &&
+              apk add openssh-client &&
+              scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@sharer:/srv/{FOLDER}/. /srv
+          volumeMounts:
+            - name: srv
+              mountPath: /srv
+            - name: ssh
+              mountPath: /root/.ssh
+      containers:
+      - name: {NAME}
+        image: {IMAGE}
+        envFrom:
+        - configMapRef:
+              name: secrets
+        {CONFIG}
+        volumeMounts:
+            - name: srv
+              mountPath: /srv
+      - name: file-sender
+        image: alpine:3.7
+        command:
+          - "sh"
+          - "-c"
+          - >
+            set -euo pipefail &&
+            apk update &&
+            apk add jq curl openssh-client &&
+            cert="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt" &&
+            token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) &&
+            name="{NAME}" &&
+            while true; do
+                 output=$(curl -s --cacert $cert --header "Authorization: Bearer $token" "https://kubernetes.default.svc/api/v1/pods?labelSelector=job-name=$name") &&
+                 state=$(echo $output| jq ".items[0].status.containerStatuses[] | select(.name == \"$name\") | .state") &&
+                 done=$(echo $state | jq '.terminated') &&
+                 if [ "$done" != "null" ]; then
+                   if [ $(echo $state | jq '.terminated.exitCode') == "0" ]; then
+                     break;
+                   else
+                     echo $state && echo Job has failed && exit 1;
+                   fi;
+                 else
+                   echo -n "." && sleep 3;
+                 fi;
+            done &&
+            echo "tar fails on k8s 1.8 when too many files exists, make cleanup" &&
+            rm -rf /srv/node_modules &&
+            scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /srv/. root@sharer:/srv/{FOLDER}
+        volumeMounts:
+            - name: srv
+              mountPath: /srv
+            - name: ssh
+              mountPath: /root/.ssh
+      restartPolicy: Never
+      volumes:
+        - name: srv
+          emptyDir: {}
+        - name: ssh
+          secret:
+            secretName: ssh-keys
+            defaultMode: 0600

@@ -1,0 +1,11 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: my-ip # gcloud compute addresses create my-ip --global
+    kubernetes.io/ingress.class: "gce"
+spec:
+  backend:
+    serviceName: front
+    servicePort: 80

@@ -1,0 +1,55 @@
+# We use SCP for file exchange during CI stage, those are safe to store here
+# as no external communication is possible against test cluster
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ssh-keys
+type: Opaque
+data:
+  authorized_keys: c3NoLXJzYSBBQUFBQjNOemFDMXljMkVBQUFBREFRQUJBQUFCQVFEWlFlMGpYejdMQ1pjTVlKeDZDWFJNTEoySmdhQkhDZE43UW1NckJBc3c4Vm1TWmhvMEVzckZ6Y0pFbThtTnFpWEltMUJ5NzNBWjh1YysyQU52enp2ZmhwRFA2bitha3JtdUFPMEdJemRKYjh5VGJJUjhzd1N4ZzM4blFnRml1SGtwaVlrek5GNjB5dWhVZ0tzTlY5dEtrSjFPbnEvbGRBSEtIYWlXak80N1QxaWc5cVdhTXRsTUpFaUV1UVVuUHR3RGtlb1FsTnlma0JwQUNpSGNXSXFSMTMxaGJZanhSS092RjRJVFo4bC8zWDJPVm1Vb1lwT1FzcEt6WDloWHkvcGdEL0JuclN4R2FsMHg5b3BPYWZNR1dNY2xSWExvTkt3cnY2RFcrS0RVMGpVL0Z1QlljTkpMdWNWZi8vMHhvZGl4SkVxK0RtejBVMUhNeC9Uemt6TlYgZmVzc2d1aWRAZmVzc2d1aWRzLU1hY0Jvb2stUHJvLmxvY2FsCg==
+  id_rsa: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcEFJQkFBS0NBUUVBMlVIdEkxOCt5d21YREdDY2VnbDBUQ3lkaVlHZ1J3blRlMEpqS3dRTE1QRlprbVlhCk5CTEt4YzNDUkp2Smphb2x5SnRRY3U5d0dmTG5QdGdEYjg4NzM0YVF6K3AvbXBLNXJnRHRCaU0zU1cvTWsyeUUKZkxNRXNZTi9KMElCWXJoNUtZbUpNelJldE1yb1ZJQ3JEVmZiU3BDZFRwNnY1WFFCeWgyb2xvenVPMDlZb1BhbAptakxaVENSSWhMa0ZKejdjQTVIcUVKVGNuNUFhUUFvaDNGaUtrZGQ5WVcySThVU2pyeGVDRTJmSmY5MTlqbFpsCktHS1RrTEtTczEvWVY4djZZQS93WjYwc1JtcGRNZmFLVG1uekJsakhKVVZ5NkRTc0s3K2cxdmlnMU5JMVB4YmcKV0hEU1M3bkZYLy85TWFIWXNTUkt2ZzVzOUZOUnpNZjA4NU16VlFJREFRQUJBb0lCQUI1cVcxK2pXdkFqNUpDbwpDZUFQNk1jdFM5VFBYL2Z5Q1RodFgrTEt5eUpMOTZWR1JBN2NQcVVZbkVUc3BuZjl4UkpqcEF5ak5zZDdPU0tVCkxVNys3VHZxNCtVbnlEdUVwUmdXS3hpNzMyYVpqME5vWXRmdVhBN2FBUGduQm5paXFOdkcxSDFscklpVkM1ZWcKOTlHRFprRDNJLzY0dXBsZDkwNHJmc21zNjBGRUpWcEFwZGhocGU2UHJvdDdXaHBabUVPZUtKL3h1S2tZZDJSOQphQlluK0lmUTd1TEVLL2tuZ2huMWpWNnMyM0ZqeW5qK2dZWU96ME9nS29MbVhBQTRTd2I5dnh3MC9EOHlGVTdGCjFQZjhpKzhjaEtwZFNUbWYyZnRFY0JnMytpZ1FwT1UwMm1VSTkxVHlnQzlaYXh2bTVTY1UzRnVGcGhKRkNWZmIKeDVqMXFlRUNnWUVBK1dudU00NW8wczc1S09PWkVhWWFEcG81VEs1Tko1RGxYVXJOdXVYUUJlM2VpNCtEVlArQwpWcG9DeFUzNjVSVjlpaUdzcFlDMWhaRlBaOUlrUXVPOUNtbEo0TFRuUFgxVGV3MTBJN2JRbzU1ZEN6TkxrQU00CmpHaUN2U05NcklWYW9qQWlhL2YwUFVtbnRmcEh3VE5kZzZ4NUtYUjZuOGd6cnAwVC9ZMGh3MzBDZ1lFQTN2NmQKaGN5K3QyR1ZrUDJDeXBTbjF5dldxemhxNXhBSDFVb2xwV1JNT3hqWE1RM1l0emE0RlBWazQvQnFkaVBxZk5qcwpUdU04dlpKNVpzaUxEUnZFdlVJZGVhU204dkFXU0l2d0Z5SHpObHdjeHJmNEt2ZTBkSDlYUHlWZXRoMnE4V1lnCm9tc05LTlcyRUZtbU1tbjMyZml5dkNrRUFhRldKQU1yQ2YxNEJya0NnWUFMN2t4TnZRODRubHYrMzd4UHd0RlcKUjN4Y05hNU5LVG8vbHpkMkxFNGlLbm5OMVVTa0NVRHo0WlFtV2crWmE4akFsZEhMYlBmQjl1eUVlK0h1TFRTNgp6Y1NSOGpWcGxKZ3N0NzBKaEZKQXNXK2ovSVV0MDJtZUZkWEROSEFUaEtHTVJwOHU2UUtPOS9vRTAzOGhOOUxPClhLN0RFK1pWeEY3c2lHa1BaUFByaFFLQmdRQ2RNRlB2dml6dDdYN1Z6cTRFaVJkcTZMOFF3TnN5ZDYxZDN6OTgKUDZBd3hFamtqa01tbXc3VnowbElGKytqeVp1QVdCVHpZdUV0TEhRaFROb2Y2bVFibU9CWUlBV0RHRlJNM1Qvbgp2b25IMXRSK0M2Nkc4MGNrRzZOdm9yTUpvdzRkemdUUkdLOFZDdGlrMjl6NGlwUW85Vk5ncVhUbWhVaklaK2ROCnludHlHUUtCZ1FDYkN0UnAzQnRHSlhEclRwOU9IQlNFNnhFL2lsbmN6ZE5FYWtXYkZJWDB6ak8xOGZTaFVsUmcKa3B4dnVIT1lzeFlkekdBTWhMMEh1Q2ZBOVJLY1JodE4xZkMvWjJYRjZ6a3B2eHZHNzk3Q2NybVZ3S1l3UDVMVwpVSy9TTURpRHRvSGFxRkpleDB4OU5XQlNPZ21kQW80L213ZXFUUC9wblRlUkRQcDJaWjUyZ2c9PQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo=
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sharer
+spec:
+  selector:
+    app: sharer
+  ports:
+  - port: 22
+    targetPort: 22
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: sharer
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: sharer
+    spec:
+      containers:
+      - name: sharer
+        image: alpine:3.7
+        command:
+          - "sh"
+          - "-c"
+          - >-
+            apk update &&
+            apk add --no-progress openssh &&
+            ssh-keygen -A &&
+            chmod 600 /root/.ssh &&
+            /usr/sbin/sshd -e -D
+        ports:
+        - containerPort: 22
+        volumeMounts:
+          - name: ssh
+            mountPath: /root/.ssh
+      volumes:
+        - name: ssh
+          secret:
+            secretName: ssh-keys
+            defaultMode: 0600

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {NAME}
+data:
+  ZK: zookeeper-0.zookeeper:2181
+  KAFKA: kafka-0.kafka:9092

@@ -1,0 +1,39 @@
+version: 2
+jobs:
+   build:
+     docker:
+       - image: google/cloud-sdk:latest
+     steps:
+       - checkout
+       - run:
+           name: Setup
+           command: |
+             apt-get -qq install parallel --yes
+             ln /usr/bin/md5sum /usr/bin/md5
+             ns_name=$(echo "ci-"$CIRCLE_BUILD_NUM | sed "s/\//-/")
+             echo "export PROJECT=test" >> $BASH_ENV
+             echo "export PROD_CLUSTER=test" >> $BASH_ENV
+             echo "export VERSION=$CIRCLE_BUILD_NUM" >> $BASH_ENV
+             echo "export NAMESPACE=eu.gcr.io" >> $BASH_ENV
+             echo "export COMPUTE_ZONE=europe-west3-a" >> $BASH_ENV
+             echo "export SHELL=/bin/bash" >> $BASH_ENV
+             echo "export ISOLATION=cluster" >> $BASH_ENV
+             echo "export FILTER=''" >> $BASH_ENV
+             git remote add pushback https://$PUSHBACK_TOKEN@github.com/org/project.git
+             git config --global user.name "First Last"
+             git config --global user.email "first.last@example.com"
+       - run:
+           name: Build
+           command: |
+             if [ $CIRCLE_BRANCH == "master" ]; then
+                ENV=prod ACTION=build bash .circleci/ci.sh
+                kubectl apply --filename env/ingress.yaml
+             else
+                ENV=test ACTION=test bash .circleci/ci.sh
+             fi
+       - run:
+           name: Cleanup
+           when: always
+           command: |
+             if [ $CIRCLE_BRANCH == "master" ]; then exit 0; fi
+             bash .circleci/cleanup.sh
