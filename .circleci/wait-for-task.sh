@@ -17,7 +17,13 @@ while true; do
 done
 
 job_pod=$(kubectl get pods --selector="job-name=$JOB_NAME" --show-all --output=jsonpath={.items..metadata.name})
-echo "----------------- $JOB_NAME logs ------------------"
+
+echo "------ $JOB_NAME logs of $job_pod ------"
+
+initContainer=$(kubectl get pod $job_pod --output=jsonpath={.spec.initContainers[].name})
+if [[ $initContainer ]]; then
+    kubectl logs $job_pod --container $initContainer
+fi
 kubectl logs $job_pod --container $JOB_NAME
 
 if [[ $(kubectl get jobs --selector="job-name=$JOB_NAME" --output=jsonpath={.items..status.succeeded}) ]]; then
