@@ -10,15 +10,20 @@ jobs:
            command: |
              apt-get -qq install parallel --yes
              ln /usr/bin/md5sum /usr/bin/md5
-             ns_name=$(echo "ci-"$CIRCLE_BUILD_NUM | sed "s/\//-/")
-             echo "export PROJECT=test" >> $BASH_ENV
-             echo "export PROD_CLUSTER=test" >> $BASH_ENV
-             echo "export VERSION=$CIRCLE_BUILD_NUM" >> $BASH_ENV
-             echo "export NAMESPACE=eu.gcr.io" >> $BASH_ENV
-             echo "export COMPUTE_ZONE=europe-west3-a" >> $BASH_ENV
-             echo "export SHELL=/bin/bash" >> $BASH_ENV
-             echo "export ISOLATION=cluster" >> $BASH_ENV
-             echo "export FILTER=''" >> $BASH_ENV
+             cat <<EOF >> $BASH_ENV
+               export PROJECT=test
+               export PROD_CLUSTER=test
+               export VERSION=$CIRCLE_BUILD_NUM
+               export NAMESPACE=eu.gcr.io
+               export COMPUTE_ZONE=europe-west3-a
+               export SHELL=/bin/bash
+               export ISOLATION=cluster
+               export CLUSTER_MACHINE_TYPE=n1-standard-2
+               export CLUSTER_MACHINE_COUNT=2
+               export CLUSTER_MACHINE_DISK=75
+               export CLUSTER_KUBERNETES_VER=1.9.2-gke.1
+               export FILTER=''
+             EOF
              git remote add pushback https://$PUSHBACK_TOKEN@github.com/org/project.git
              git config --global user.name "First Last"
              git config --global user.email "first.last@example.com"
