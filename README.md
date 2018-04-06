@@ -17,6 +17,14 @@ Once PR is made CI would create new Kuberentes cluster, deploy all apps, run all
 
 Once PR is merged - deploy all new apps to production cluster. Google Container Builder is used for image building
 
+## Local development/deployment
+
+- `./run.sh build [FILTER]` - build, where `FILTER` is an optional podname
+- `./run.sh test [FILTER]` - build and test, where `FILTER` is an optional podname
+- `./run.sh switch [ENV]` - switch environment, where `ENV` is `prod` or empty for local env
+- `./run.sh expose [EXPOSE]` - expose pod from kubernetes to local machine, where
+  EXPOSE is `podname` OR `podname:podport` or `podname1:podport1 podname2:podport2 ...`
+
 ### Setup
 
 Starting point is [.circleci/config.yml](.circleci/config.yml). It's CircleCI config, but it's used only as an example and you can achieve exactly the same with Travis or self hosted solutions like Jenkins. Properties:
