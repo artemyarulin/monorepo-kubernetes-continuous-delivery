@@ -1,10 +1,17 @@
 set -euo pipefail
 
+log() {
+    set -euo pipefail
+    echo "[$(date)] $1"
+}
+export -f log
+
 # Setup gcloud, service account auth, project, default zone
 gc_set_project() {
     local key=$1
     local project=$2
     local zone=$3
+    log "Setting GC project $project"
     echo $key | base64 --decode --ignore-garbage > ~/.gc_key
     gcloud auth activate-service-account --key-file ~/.gc_key
     gcloud config set project $project
@@ -14,6 +21,7 @@ gc_set_project() {
 # Authenticate so that kubectl has access to cluster
 gc_cluster_auth() {
     local name=$1
+    log "Cluster authentication $name"
     gcloud container clusters get-credentials $name
 }
 
@@ -21,11 +29,14 @@ gc_cluster_auth() {
 gc_create_cluster() {
     set -euo pipefail
     local name=$1
+    log "Creating cluster $name of $CLUSTER_MACHINE_COUNT x $CLUSTER_MACHINE_TYPE"
     gcloud container clusters create $name \
-           --cluster-version 1.8.5-gke.0 \
-           --disk-size 100 \
-           --machine-type g1-small \
-           --num-nodes 3
+           --cluster-version $CLUSTER_KUBERNETES_VER \
+           --disk-size $CLUSTER_MACHINE_DISK \
+           --machine-type $CLUSTER_MACHINE_TYPE \
+           --num-nodes $CLUSTER_MACHINE_COUNT
+    log "Cluster created: $?"
+    kubectl describe nodes
 }
 export -f gc_create_cluster
 
@@ -33,8 +44,10 @@ export -f gc_create_cluster
 namespace_switch() {
     set -euo pipefail
     local name=$1 res=0
+    log "Namespace switching $name"
     kubectl get ns $name || res=$? && true
     if [[ $res -ne 0 ]]; then
+        log "Namespace doesn't exists, creating"
         kubectl create ns $name
     fi
     kubectl config set-context $(kubectl config current-context) --namespace=$name
@@ -46,46 +59,39 @@ build_local() {
     set -euo pipefail
     local version="$1"
     local filter="$2"
+    log "Build local for $version filtered by $filter"
     for dockerfile in $(find . -name "Dockerfile" -o -name "*.integration"); do
         if [[ $filter && $dockerfile != *$filter* ]]; then continue; fi
         dir=$(dirname $dockerfile)
-        app=$(echo $dockerfile | cut -d "/" -f 3 | sed "s/^[0-9]*-//")
+        app=$(echo $dockerfile | cut -d "/" -f 3 | sed "s/^[0-9]*-//" | sed "s/\./-/")
         tag_suffix=$(basename $dockerfile | sed "s/Dockerfile//; s/\.integration//; s/^/-/; s/^-$//")
-        echo "Building $dockerfile"
+        log "Building $dockerfile"
         (cd $dir && docker build --file $(basename $dockerfile) --tag $app$tag_suffix:$version .)
     done
 }
 export -f build_local
 
 # Build all Dockerfiles (and *.integration) in parallel using Google Container Builder
-# Tries to find previously built image and uses that as cache
 build_gc() {
     set -euo pipefail
     local version=$1 namespace=$2 project=$3
+    log "Build GC for $version in project $project"
     for dockerfile in $(find . -name "Dockerfile" -o -name "*.integration"); do
         dir=$(dirname $dockerfile)
-        app=$(echo $dockerfile | cut -d "/" -f 3 | sed "s/^[0-9]*-//")
+        app=$(echo $dockerfile | cut -d "/" -f 3 | sed "s/^[0-9]*-//" | sed "s/\./-/")
         tag_suffix=$(basename $dockerfile | sed "s/Dockerfile//; s/\.integration//; s/^/-/; s/^-$//")
         image_name="$namespace/$project/$app$tag_suffix"
-        last_app_build=$(gcloud container builds list --filter "images ~ $image_name: AND status = SUCCESS" --format='value(images)' --limit 1)
-        if [[ $last_app_build ]]; then
-            echo "Found prev build, using cached version $last_app_build for $image_name"
-            template_file="container-build-cached.yaml";
-        else
-            echo "No cached version found, build from scratch"
-            template_file="container-build.yaml"
-        fi
+        template_file="container-build.yaml"
         cat .circleci/$template_file \
-            | sed "s|{CACHED}|$last_app_build|" \
             | sed "s|{NAME}|$image_name:$version|" \
             | sed "s|{DOCKERFILE}|$(basename $dockerfile)|" > ./$dir/build.yaml.tmp
         (cd $dir && gcloud container builds submit --config build.yaml.tmp --async .)
     done
 
-    echo "[$(date)] Waiting for build to complete"
+    log "Waiting for build to complete"
     while true; do
         if [[ $(gcloud container builds list --ongoing --filter "images ~ $namespace/$project/.*:$version" --format json) = "[]" ]]; then
-            echo -e "\n[$(date)] Done"
+            log "Done"
             break
         else
             echo -n "."
@@ -104,47 +110,82 @@ build_gc() {
 }
 export -f build_gc
 
-# Deploy services using locally built images. imagePullPolicy: Never is required so that
-# Docker for Mac k8s would use local docker image cache
-deploy_services_local() {
+# Deploy services aka stetefulsets
+deploy_services() {
+    set -euo pipefail
+    local pull_mode=$1
+    local version=$2
+    local namespace=$3
+    local project=$4
+    local filter=$5
+    log "Deploying services with pull_mode $pull_mode"
     for path in services/*; do
-        if [[ $FILTER && $path != *$FILTER* ]]; then continue; fi
-        service=$(basename $path | sed "s/^[0-9]-//")
-        if [ ! -f $path/config.yaml ]; then continue; fi
-        cat $path/config.yaml \
-            | sed "s/{IMAGE}/$service:$VERSION"$'\\\n        imagePullPolicy: Never/' \
-            | sed "s/{NAME}/$service/" \
-            | kubectl apply --filename -
-        kubectl rollout status statefulset/$service
+        if [[ $filter && $path != *$filter* ]]; then continue; fi
+        name=$(basename $path | sed "s/^[0-9]-//")
+        image_pattern="s/{IMAGE}/$name:$version/"
+        if [ "$pull_mode" == "gce" ]; then
+            image_pattern="s/{IMAGE}/$namespace\/$project\/$name:$version/"
+        fi
+        if [ -f $path/service.yaml ]; then
+            cat $path/service.yaml \
+                | sed "$image_pattern" \
+                | sed "s/{NAME}/$name/" \
+                | kubectl apply --filename -
+            kubectl rollout status statefulset/$name
+        fi
     done
 }
+export -f deploy_services
 
-# Deploy services using Google Container Build images
-deploy_services_gc() {
+# Apply service migrations if exists. It tracks list of applied migration using Kubernetes
+# job list, so each migration would be run only once
+services_migration() {
+    local mode=$1
+    local namespace=$2
+    local project=$3
+    local version=$4
+    local filter=$5
     for path in services/*; do
-        service=$(basename $path | sed "s/^[0-9]-//")
-        if [ ! -f $path/config.yaml ]; then continue; fi
-        cat $path/config.yaml \
-            | sed "s/{IMAGE}/$NAMESPACE\/$PROJECT\/$service:$VERSION/" \
-            | sed "s/{NAME}/$service/" \
-            | kubectl apply --filename -
-        kubectl rollout status statefulset/$service
+        if [[ $filter && $path != *$filter* ]]; then continue; fi
+        name=$(basename $path | sed "s/^[0-9]-//")
+        image_pattern="s/{IMAGE}/$name:$version/"
+        if [ $mode == "gc" ]; then
+           image_pattern="s/{IMAGE}/$namespace\/$project\/$name:$version/"
+        fi
+        if [ -f $path/job.yaml ]; then
+            if [[ $(kubectl get jobs "$name" --ignore-not-found) ]]; then
+                   log "$name exists, skipping"
+            else
+              if [ -f $path/config.yaml ]; then
+                  cat $path/config.yaml | sed "s/{NAME}/$name/" | kubectl apply --filename -
+              fi
+              cat $path/job.yaml \
+                  | sed "$image_pattern" \
+                  | sed "s/{NAME}/$name/" \
+                  | kubectl apply --filename -
+              bash .circleci/wait-for-task.sh --task-name "$name"
+            fi
+        fi
     done
 }
+export -f deploy_services
 
-# Deploy apps using locally built images. imagePullPolicy: Never is required so that
-# Docker for Mac k8s would use local docker image cache
+# Deploy apps using locally built images
 deploy_apps_local() {
+    set -euo pipefail
     local port=8080
+    local filter=$1
+    local version=$2
+    log "Deploying locally apps filtered by $filter"
     for path in apps/*; do
-        if [[ $FILTER && $path != *$FILTER* ]]; then continue; fi
+        if [[ $filter && $path != *$filter* ]]; then continue; fi
         app=$(basename $path)
         if [ -f $path/config.yaml ]; then
             cat $path/config.yaml | sed "s/{NAME}/$app/" | kubectl apply --filename -
         fi
         if [ -f $path/app.yaml ]; then
             cat $path/app.yaml \
-                | sed "s/{IMAGE}/$app:$VERSION"$'\\\n        imagePullPolicy: Never/' \
+                | sed "s/{IMAGE}/$app:$version/" \
                 | sed "s/{PORT}/$port/" \
                 | sed "s/{NAME}/$app/" \
                 | kubectl apply --filename -
@@ -152,10 +193,16 @@ deploy_apps_local() {
         fi
     done
 }
+export -f deploy_apps_local
 
 # Deploy apps using Google Container Build images
 deploy_apps_gc() {
+    set -euo pipefail
     local port=8080
+    local namespace=$1
+    local project=$2
+    local version=$3
+    log "Deploying GCP apps"
     for path in apps/*; do
         app=$(basename $path)
         if [ -f $path/config.yaml ]; then
@@ -163,7 +210,7 @@ deploy_apps_gc() {
         fi
         if [ -f $path/app.yaml ]; then
             cat $path/app.yaml \
-                | sed "s/{IMAGE}/$NAMESPACE\/$PROJECT\/$app:$VERSION/" \
+                | sed "s/{IMAGE}/$namespace\/$project\/$app:$version/" \
                 | sed "s/{PORT}/$port/" \
                 | sed "s/{NAME}/$app/" \
                 | kubectl apply --filename -
@@ -171,18 +218,44 @@ deploy_apps_gc() {
         fi
     done
 }
+export -f deploy_apps_gc
 
 # We don't deploy jobs as it starts automatically after deployment and it's not always intended
-# But there are may be job config files that later on can be used for job tests
+# But there are may be job config files that later on can be used for job tests, and we also do deploy
+# CronJobs as those are safe to re-deploy
 deploy_jobs() {
+    set -euo pipefail
+    local shouldDeploy=$1
+    local version=$2
+    local namespace=$3
+    local project=$4
+    local filter=$5
     for path in jobs/*; do
-        if [[ $FILTER && $path != *$FILTER* ]]; then continue; fi
-        app=$(basename $path)
+        if [[ $filter && $path != *$filter* ]]; then continue; fi
+
+        name=$(basename $path)
         if [ -f $path/config.yaml ]; then
-            cat $path/config.yaml | sed "s/{NAME}/$app/" | kubectl apply --filename -
+            cat $path/config.yaml | sed "s/{NAME}/$name/" | kubectl apply --filename -
         fi
+
+        if [ ! -f $path/job.yaml ]; then continue; fi
+
+        if [[ ! $(cat $path/job.yaml | grep "kind: CronJob") ]] || [ "$shouldDeploy" == "false" ]; then
+            echo "Non deployable env or non CronJob, skipping the deployment, validation only"
+            cat $path/job.yaml \
+                | sed "s/{IMAGE}/$namespace\/$project\/$name:$version/" \
+                | sed "s/{NAME}/$name/" \
+                | kubectl apply --dry-run --filename -
+            continue
+        fi
+
+        cat $path/job.yaml \
+            | sed "s/{IMAGE}/$namespace\/$project\/$name:$version/" \
+            | sed "s/{NAME}/$name/" \
+            | kubectl apply --filename -
     done
 }
+export -f deploy_jobs
 
 # Runs all *.integration in parallel as k8s jobs. We also attach [app|service|job] config if exits so that
 # important environment variables can be accessed in test as well. Test runs in 3 stages:
@@ -192,10 +265,11 @@ deploy_jobs() {
 run_integrations() {
     image_source=$1
     tasks=()
+    log "Running integrations for image_source $image_source"
     for integration in $(find . -name "*.integration"); do
         if [[ $FILTER && $integration != *$FILTER* ]]; then continue; fi
         key=ci-$VERSION-$(echo $integration | md5 | sed "s/  -//")
-        app=$(echo $integration | cut -d "/" -f 3 | sed "s/^[0-9]*-//")
+        app=$(echo $integration | cut -d "/" -f 3 | sed "s/^[0-9]*-//" | sed "s/\./-/")
         tag_suffix=$(basename $integration | sed "s/\.integration//; s/^/-/")
         image_name="$app$tag_suffix:$VERSION"
         if [[ $image_source == "gce" ]]; then image_name="$NAMESPACE\/$PROJECT\/"$image_name; fi
@@ -220,23 +294,26 @@ run_integrations() {
     done
     if [ ${#tasks[@]} -ne 0 ]; then
         cmd_wait="bash $(dirname $0)/wait-for-task.sh --task-name"
-        printf '%s\n' "${tasks[@]}" | parallel --halt 2 $cmd_wait
+        printf '%s\n' "${tasks[@]}" | parallel --joblog /tmp/jobs.log --halt 2 $cmd_wait
     fi
+    cat /tmp/jobs.log
 }
 
 # SSH file exchange - used for pulling integration related files and pushing back after integraion changes
 create_sharer() {
     set -euo pipefail
-    kubectl apply --filename $(dirname $0)/sharer.yaml
+    local filter=$1
+    local version=$2
+    log "Creating sharer for version $version filtered by $filter"
+    kubectl apply --filename .circleci/sharer.yaml
     kubectl rollout status deployment/sharer
     sharer=$(kubectl get pods --selector="app=sharer" --output=jsonpath={.items..metadata.name})
     for dockerfile in $(find . -name "*.integration"); do
-        if [[ $FILTER && $dockerfile != *$FILTER* ]]; then continue; fi
-        name=ci-$VERSION-$(echo $dockerfile | md5 | sed "s/  -//")
+        if [[ $filter && $dockerfile != *$filter* ]]; then continue; fi
+        name=ci-$version-$(echo $dockerfile | md5 | sed "s/  -//")
         target_dir=$(dirname $dockerfile)
         echo "Prepearing data for $target_dir"
-        kubectl exec $sharer -- mkdir /srv/$name
-        (cd $target_dir && kubectl cp . $sharer:/srv/$name/)
+        kubectl cp $target_dir $sharer:/srv/$name
     done
 }
 export -f create_sharer
@@ -244,11 +321,15 @@ export -f create_sharer
 # Fetch data after integration and make a commit back when non local env is used
 fetch_integration_data() {
     local version=$1 pushback=$2
+    log "Fetching integration data with pushback $pushback"
     sharer=$(kubectl get pods --selector="app=sharer" --output=jsonpath={.items..metadata.name})
     msgs=()
+    # Remove extra files before copy to make copy faster
+    kubectl exec $sharer -- sh -c "find /srv -name node_modules -exec rm -rf {} +"
     for integration in $(find . -name "*.integration"); do
         if [[ $FILTER && $integration != *$FILTER* ]]; then continue; fi
         name=ci-$version-$(echo $integration | md5 | sed "s/  -//")
+        app=$(echo $integration | cut -d "/" -f 3 | sed "s/^[0-9]*-//" | sed "s/\./-/")
         target_dir=$(dirname $integration)
         tag_suffix=$(basename $integration | sed "s/\.integration//; s/^/-/")
         friendly_name="$app$tag_suffix"
@@ -262,7 +343,7 @@ fetch_integration_data() {
         for (( idx=${#msgs[@]}-1 ; idx>=0 ; idx-- )) ; do
             git stash pop
             git add --all
-            git commit -m "${msgs[idx]}"
+            git commit -m "${msgs[idx]}" || true
         done
         if [[ $(git log origin/$CIRCLE_BRANCH..$CIRCLE_BRANCH) ]]; then
             git push --set-upstream pushback $CIRCLE_BRANCH || true
@@ -273,23 +354,18 @@ fetch_integration_data() {
 # Checkc that no pods were restrted. Ensures that pods are stable
 ensure_none_restarted() {
     # 1.9 has much better feature for filter https://github.com/kubernetes/kubernetes/issues/49387
-    restarted=$(kubectl get pods --output="jsonpath={range .items[*]}{.metadata.name},{.status.containerStatuses..restartCount}{\"\n\"}{end}" | sed "/,0$/d" | cut -d ',' -f 1)
+    restarted=$(kubectl get pods --output="jsonpath={range .items[*]}{.metadata.name},{.status.containerStatuses..restartCount}{\"\n\"}{end}" | sed "/,[0 ]*0$/d" | cut -d ',' -f 1)
     if [[ $restarted ]]; then
-        echo "$restarted" | xargs -n 1 kubectl logs --previous
         echo "Pods were restarted during testing: $restarted"
+        echo "$restarted" | xargs -n 1 kubectl describe pod
+        echo "$restarted" | xargs -n 1 kubectl logs --previous
         exit 1
     fi
 }
 
 # Runs integration locally
 test_local() {
-    # due to the bug https://github.com/kubernetes/kubernetes/issues/54723 we have to wait until all terminating pods got cleaned up
-    # otherwise there is a good chance that request ends up on dead pod which will break tests
-    # fixed in k8s 1.8.3, remove once Docker For Mac starts using new k8s version
-    while [[ $(kubectl get pods | grep "Terminating") ]]; do
-        echo "Waiting for terminating pods..."
-        sleep 3
-    done
+    log "Testing locally"
     run_integrations "local"
     fetch_integration_data "$VERSION" false
     kubectl get jobs --show-all
@@ -297,6 +373,7 @@ test_local() {
 
 # Runs integration in GC
 test_gc() {
+    log "Testing on GCP"
     ensure_none_restarted
     run_integrations "gce"
     fetch_integration_data "$VERSION" true
@@ -306,39 +383,51 @@ test_gc() {
 
 # Sets current build number
 set_version() {
+    log "Setting version"
     if [[ -n "${CIRCLE_BUILD_NUM:-}" ]]; then
         VERSION=$CIRCLE_BUILD_NUM
     else
         VERSION=$(date +%s)
     fi
-    echo "Version $VERSION"
+    log "Version $VERSION"
 }
 
 # Initialize cluster wide secrets
 init_secrets() {
+    set -euo pipefail
+    log "Init secrets"
     if [[ -f env/secrets.yaml ]]; then
         kubectl apply --filename env/secrets.yaml
     fi
+    # Check if local override version exists and load that
+    if [[ -f env/secrets.yaml.tmp ]]; then
+        kubectl apply --filename env/secrets.yaml.tmp
+    fi
 }
+export -f init_secrets
 
 # Runs env -> build -> deploy -> test workflow
 run() {
-    local auth=$1 env=$2 build=$3 test=$4 services=$5 apps=$6
+    local auth=$1 env=$2 build=$3 test=$4 services=$5 services_migration=$6 apps=$7 jobs=$8
     eval "$auth"
-    (echo "$env"; echo "$build") | parallel
-    init_secrets
-    if [[ $ACTION == "test" ]]; then create_sharer; fi
-    eval "$services"
+    if [[ $ACTION == "test" ]]; then
+        (echo "$env && init_secrets && $services && create_sharer \"$FILTER\" \"$VERSION\""; echo "$build") | parallel --halt 2 --line-buffer
+    else
+        (echo "$env && init_secrets && $services"; echo "$build") | parallel --halt 2 --line-buffer
+    fi
+    eval "$services_migration"
     eval "$apps"
-    deploy_jobs
+    eval "$jobs"
     if [[ $ACTION == "test" ]]; then eval "$test"; fi
 }
 
 auth_local() {
+    log "Authenticating locally"
     kubectl config use-context docker-for-desktop
 }
 
 auth_gc() {
+    log "Authenticating GCP"
     gc_set_project $GC_SERVICE_KEY $PROJECT $COMPUTE_ZONE
     gc_cluster_auth $PROD_CLUSTER
 }
@@ -346,6 +435,7 @@ auth_gc() {
 env_local() {
     set -euo pipefail
     local project=$1 version=$2
+    log "Setting up local environment"
     namespace_switch $project
 }
 export -f env_local
@@ -355,11 +445,12 @@ export -f env_local
 set_integration_permission() {
     set -euo pipefail
     local ns_name=$1
+    log "Setting up integration permission for ns: $ns_name"
     cur_service_acc=$(gcloud config get-value account)
     raised_perm_name="ci-service-acc-admin"
     # Before creating new service account we need to raise cur acc permission
     if [[ $(kubectl get clusterrolebinding | grep $raised_perm_name) ]]; then
-        echo "Role already exists $raised_perm_name"
+        log "Role already exists $raised_perm_name"
     else
         kubectl create clusterrolebinding $raised_perm_name \
                 --clusterrole=cluster-admin \
@@ -376,6 +467,7 @@ export -f set_integration_permission
 env_gc() {
     set -euo pipefail
     local project=$1 version=$2 isolation=$3
+    log "Setting up GCP environment with isolation: $isolation"
     name="ci-$project-$version"
     ns=$name
     if [[ $isolation == "cluster" ]]; then
@@ -395,26 +487,32 @@ if [[ $ENV == "local" ]]; then
     env="env_local $PROJECT $VERSION $ACTION"
     build="build_local $VERSION \"$FILTER\""
     test="test_local"
-    services="deploy_services_local"
-    apps="deploy_apps_local"
-    run "$auth" "$env" "$build" "$test" "$services" "$apps"
+    services="deploy_services local \"$VERSION\" \"\" \"$PROJECT\" \"$FILTER\""
+    services_migrations="services_migration local \"\" \"$PROJECT\" \"$VERSION\" \"$FILTER\""
+    apps="deploy_apps_local \"$FILTER\" \"$VERSION\""
+    jobs="deploy_jobs false \"$VERSION\" \"\" \"$PROJECT\" \"$FILTER\""
+    run "$auth" "$env" "$build" "$test" "$services" "$services_migrations" "$apps" "$jobs"
 elif [[ $ENV == "test" ]]; then
     auth="auth_gc"
     env="env_gc $PROJECT $VERSION $ISOLATION"
     build="build_gc $VERSION $NAMESPACE $PROJECT"
     test="test_gc"
-    services="deploy_services_gc"
-    apps="deploy_apps_gc"
-    run "$auth" "$env" "$build" "$test" "$services" "$apps"
+    services="deploy_services gce \"$VERSION\" \"$NAMESPACE\" \"$PROJECT\" \"$FILTER\""
+    services_migrations="services_migration gc \"$NAMESPACE\" \"$PROJECT\" \"$VERSION\" \"$FILTER\""
+    apps="deploy_apps_gc \"$NAMESPACE\" \"$PROJECT\" \"$VERSION\""
+    jobs="deploy_jobs false \"$VERSION\" \"$NAMESPACE\" \"$PROJECT\" \"$FILTER\""
+    run "$auth" "$env" "$build" "$test" "$services" "$services_migrations" "$apps" "$jobs"
 elif [[ $ENV == "prod" && $ACTION == "build" ]]; then
     auth="auth_gc"
     env="echo Using production environment"
     build="build_gc $VERSION $NAMESPACE $PROJECT"
     test="echo No testing on prod"
-    services="deploy_services_gc"
-    apps="deploy_apps_gc"
-    run "$auth" "$env" "$build" "$test" "$services" "$apps"
+    services="deploy_services gce \"$VERSION\" \"$NAMESPACE\" \"$PROJECT\" \"$FILTER\""
+    services_migrations="services_migration gc \"$NAMESPACE\" \"$PROJECT\" \"$VERSION\" \"$FILTER\""
+    apps="deploy_apps_gc \"$NAMESPACE\" \"$PROJECT\" \"$VERSION\""
+    jobs="deploy_jobs true \"$VERSION\" \"$NAMESPACE\" \"$PROJECT\" \"$FILTER\""
+    run "$auth" "$env" "$build" "$test" "$services" "$services_migrations" "$apps" "$jobs"
 else
-    echo "Not supported env or project: $ENV, $PROJECT"
+    log "Not supported env or project: $ENV, $PROJECT"
     exit 1
 fi

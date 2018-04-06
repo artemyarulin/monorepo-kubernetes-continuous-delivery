@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
       - name: sharer
-        image: alpine:3.7
+        image: instrumentisto/rsync-ssh@sha256:c60f91c57a43e6c79c7de4962dc836a3830bb7dc113f6c0cbba05af2774dcaf7
         command:
           - "sh"
           - "-c"

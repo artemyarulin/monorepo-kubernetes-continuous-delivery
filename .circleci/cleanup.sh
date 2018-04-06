@@ -3,7 +3,11 @@ set -o nounset
 set -o pipefail
 
 name=ci-$PROJECT-$VERSION
+kubectl top nodes
+kubectl top pods --all-namespaces
 kubectl get pods --show-all
+kubectl get jobs --show-all
+kubectl describe nodes
 
 if [[ $ISOLATION == "cluster" ]]; then
     disks_output=$(kubectl get persistentvolumes --output yaml)

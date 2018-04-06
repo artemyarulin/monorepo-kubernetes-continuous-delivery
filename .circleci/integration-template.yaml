@@ -10,13 +10,11 @@ spec:
       {SERVICE_ACC}
       initContainers:
         - name: file-getter
-          image: alpine:3.7
+          image: instrumentisto/rsync-ssh@sha256:c60f91c57a43e6c79c7de4962dc836a3830bb7dc113f6c0cbba05af2774dcaf7
           command:
             - "sh"
             - "-c"
             - >-
-              apk update &&
-              apk add openssh-client &&
               scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@sharer:/srv/{FOLDER}/. /srv
           volumeMounts:
             - name: srv
@@ -33,15 +31,17 @@ spec:
         volumeMounts:
             - name: srv
               mountPath: /srv
+            - name: shm
+              mountPath: /dev/shm
       - name: file-sender
-        image: alpine:3.7
+        image: instrumentisto/rsync-ssh@sha256:c60f91c57a43e6c79c7de4962dc836a3830bb7dc113f6c0cbba05af2774dcaf7
         command:
           - "sh"
           - "-c"
           - >
             set -euo pipefail &&
             apk update &&
-            apk add jq curl openssh-client &&
+            apk add jq curl &&
             cert="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt" &&
             token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) &&
             name="{NAME}" &&
@@ -56,7 +56,7 @@ spec:
                      echo $state && echo Job has failed && exit 1;
                    fi;
                  else
-                   echo -n "." && sleep 3;
+                   echo -n "." && sleep 1;
                  fi;
             done &&
             echo "tar fails on k8s 1.8 when too many files exists, make cleanup" &&
@@ -70,6 +70,8 @@ spec:
       restartPolicy: Never
       volumes:
         - name: srv
+          emptyDir: {}
+        - name: shm
           emptyDir: {}
         - name: ssh
           secret:
